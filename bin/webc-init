@@ -1,0 +1,147 @@
+#!/usr/bin/env node
+
+// 交互式命令行
+const inquirer = require('inquirer')
+const program = require('commander')
+const chalk = require('chalk')
+const ora = require('ora')
+const download = require('download-git-repo')
+const tplObj = require(`${__dirname}/../template`)
+const fs = require('fs');
+
+program
+  .usage('<template-name> [project-name]')
+program.parse(process.argv)
+// 当没有输入参数的时候给个提示
+if (program.args.length < 1) return program.help()
+
+// 好比 vue init webpack project-name 的命令一样，第一个参数是 webpack，第二个参数是 project-name
+let templateName = program.args[0]
+let projectName = program.args[1]
+// 小小校验一下参数
+if (!tplObj[templateName]) {
+  console.log(chalk.red('\n Template does not exit! \n '))
+  return
+}
+if (!projectName) {
+  console.log(chalk.red('\n Project should not be empty! \n '))
+  return
+}
+
+url = tplObj[templateName]
+
+let question = [
+  {
+    name: "author",
+    type: 'input',
+    message: "请输入作者:",
+    validate (val) {
+      if (val === '') {
+        return 'Name is required!'
+      } else if (tplObj[val]) {
+        return 'author has already existed!'
+      } else {
+        return true
+      }
+    }
+  },
+  {
+    name: "description",
+    type: 'input',
+    message: "请输入描述:",
+    validate (val) {
+      if (val === '') return 'The description is required!'
+      return true
+    }
+  },
+  {
+    name: "contextPath",
+    type: 'input',
+    message: "请输入后端上下文路径(SpringBoot的server.servlet.context-path配置):",
+    validate (val) {
+      if (val === '') return 'The description is required!'
+      return true
+    }
+  }
+]
+
+console.log(chalk.white('\n 开始生成... \n'))
+// 出现加载图标
+const spinner = ora("下载中...");
+spinner.start();
+// 执行下载方法并传入参数
+download (
+  url,
+  projectName,
+  err => {
+    if (err) {
+      spinner.fail();
+      console.log(chalk.red(`下载失败. ${err}`))
+      return
+    }
+
+    // 结束加载图标
+    spinner.succeed();
+    console.log(chalk.green('\n 下载成功!'))
+    inquirer.prompt(question).then(answers => {
+      // answers 就是用户输入的内容，是个对象
+      let { author, description } = answers;
+      // 修改package.json 为输入的名称
+      fs.readFile(projectName+`/package.json`, (err, data) => {
+        let _data = JSON.parse(data)
+        _data.name = projectName
+        _data.version = '1.0.0'
+        _data.author = answers.author
+        _data.description = answers.description
+        let str = JSON.stringify(_data, null, 4);
+        fs.writeFile(projectName + `/package.json`, str, function (err) {
+          if (err) throw err;
+          console.log('\n 请执行以下命令下载依赖:')
+          console.log(`\n    cd ${projectName} `)
+          console.log(`\n    cnpm install `)
+        })
+        // 替换上下文路径
+        var devEnvPath = projectName + `/config/dev.env.js`
+        var prodEnvPath = projectName + `/config/prod.env.js`
+        var indexPath = projectName + `/config/index.js`
+
+        fs.readFile(devEnvPath, (err, data) => {
+          data.forEach(function(item, index) {
+            fs.readFile(devEnvPath,'utf8',function(err,files){
+              var result = files.replace(/sample/g, answers.contextPath);
+         
+              fs.writeFile(devEnvPath, result, 'utf8', function (err) {
+                   if (err) return console.log(err);
+              });
+         
+            })
+          });
+        })
+        fs.readFile(prodEnvPath, (err, data) => {
+          data.forEach(function(item, index) {
+            fs.readFile(prodEnvPath,'utf8',function(err,files){
+              var result = files.replace(/sample/g, answers.contextPath);
+         
+              fs.writeFile(prodEnvPath, result, 'utf8', function (err) {
+                   if (err) return console.log(err);
+              });
+         
+            })
+          });        
+        })
+        fs.readFile(indexPath, (err, data) => {
+          data.forEach(function(item, index) {
+            fs.readFile(indexPath,'utf8',function(err,files){
+              var result = files.replace(/sample/g, answers.contextPath);
+         
+              fs.writeFile(indexPath, result, 'utf8', function (err) {
+                   if (err) return console.log(err);
+              });
+         
+            })
+          });        
+        })
+      });
+    })
+  }
+)
