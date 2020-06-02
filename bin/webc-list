@@ -1,4 +1,4 @@
 #!/usr/bin/env node
 
-const tplObj = require(`${__dirname}/../template`)
+const tplObj = require(`${__dirname}/../template/template`)
 console.log(tplObj)

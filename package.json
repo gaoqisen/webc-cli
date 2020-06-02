@@ -1,6 +1,6 @@
 {
   "name": "webc-cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "This project was generated with [Vue CLI](https://github.com/gaoqisen/webcenter-vue-cli) ",
   "main": "index.js",
   "scripts": {
@@ -11,7 +11,8 @@
     "webc-add": "bin/webc-add",
     "webc-delete": "bin/webc-delete",
     "webc-list": "bin/webc-list",
-    "webc-init": "bin/webc-init"
+    "webc-init": "bin/webc-init",
+    "webc-boot": "bin/webc-boot"
   },
   "author": "gaoqisen",
   "license": "ISC",

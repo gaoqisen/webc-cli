@@ -1,0 +1,199 @@
+#!/usr/bin/env node
+
+// 交互式命令行
+const inquirer = require('inquirer')
+const fs = require('fs');
+const download = require('download-git-repo')
+const tplObj = require(`${__dirname}/../template/template`)
+const ora = require('ora')
+const chalk = require('chalk')
+
+let question = [
+  {
+    name: "artifactID",
+    type: 'input',
+    message: "项目的唯一的标识符，实际对应项目的名称(ArtifactID: sample):",
+    validate (val) {
+      if (val === '') '项目的唯一的标识符不能为空!'
+      return true
+    }
+  },
+  {
+    name: "groupID",
+    type: 'input',
+    message: "项目组织唯一的标识符,实际对应JAVA的包的结构(GroupID: com.github):",
+    validate (val) {
+      if (val === '') '项目组织唯一的标识符不能为空!'
+      return true
+    }
+  },
+  {
+    name: "author",
+    type: 'input',
+    message: "请输入作者:",
+    validate (val) {
+      if (val === '') '作者不能为空!'
+      return true
+    }
+  },
+  {
+    name: "description",
+    type: 'input',
+    message: "请输入描述:",
+    validate (val) {
+      if (val === '') return '描述不能为空!'
+      return true
+    }
+  }
+]
+
+// 创建目录
+function makep(dir) {
+  console.log("创建文件夹：" + dir)
+  let paths = dir.split('/');
+  for(let i =1;i<paths.length + 1;i++){
+    let newPath = paths.slice(0,i).join('/');
+    try{
+    //是否能访问到这个文件，如果能访问到，说明这个文件已经存在，进入循环的下一步。
+    //accessSync的第二个参数就是用来判断该文件是否能被读取
+      fs.accessSync(newPath,fs.constants.R_OK);
+    }catch (e){
+      fs.mkdirSync(newPath);
+    }
+  }
+}
+
+// 创建文件
+function fileCreate(fromUrl, toUrl,  fileName, replaces) {
+  console.log("创建文件：" + toUrl + fileName)
+  fs.readFile(fromUrl, (err, data) => {
+    data.forEach(function(item, index) {
+      fs.readFile(fromUrl,'utf8',function(err,files){
+        var result = null;
+        for(var i = 0; i< replaces.length; i++) {
+          var obj = replaces[i]
+          if(result === null) {
+            result = files.split(obj.key).join(obj.value)
+          } else {
+            result = result.split(obj.key).join(obj.value)
+          }
+        }
+        fs.writeFile(toUrl + fileName, result, 'utf8', function (err) {
+             if (err) return console.log(err);
+        });
+      })
+    });
+  })
+}
+
+// 替换文件里面的内容
+function replaceFile(url, content) {
+  fs.readFile(url, (err, data) => {
+    data.forEach(function(item, index) {
+      fs.readFile(url,'utf8',function(err,files){
+        var result = files.replace(/sample/g, content);
+   
+        fs.writeFile(url, result, 'utf8', function (err) {
+             if (err) return console.log(err);
+        });
+   
+      })
+    });
+  })
+}
+
+const spinner = ora("Vue模版下载中...");
+
+// 下载webpage
+function downloadWebpage(url, content) {
+  url = url + '/webpage'
+  download (
+    tplObj['webcenter'],
+    url,
+    err => {
+      if (err) {
+        spinner.fail();
+        console.log(chalk.red(`Vue模版下载失败,请检查网络. ${err}`))
+        return
+      }
+  
+      // 结束加载图标
+      spinner.succeed();
+      console.log(chalk.green('\n Vue模版下载成功!'))
+
+      var packagePath = url + `/package.json`
+      fs.readFile(packagePath, (err, data) => {
+        let _data = JSON.parse(data)
+        _data.name = content.artifactID
+        _data.version = '1.0.0'
+        _data.author = content.author
+        _data.description = content.description
+        let str = JSON.stringify(_data, null, 4);
+        fs.writeFile(packagePath, str, function (err) {
+          if (err) throw err;
+        })
+      })
+
+      var devEnvPath = url + `/config/dev.env.js`
+      replaceFile(devEnvPath, content.artifactID)
+
+      var prodEnvPath = url + `/config/prod.env.js`
+      replaceFile(prodEnvPath, content.artifactID)
+
+      var indexPath = url + `/config/index.js`
+      replaceFile(indexPath, content.artifactID)
+
+      console.log('\n 请执行以下命令下载依赖:')
+      console.log(`\n    cd ${content.artifactID}/src/main/resources/webpage`)
+      console.log(`\n    cnpm install `)
+      console.log(`\n 启动命令： `)
+      console.log(`\n    cnpm run dev `)
+      console.log(`\n 编译命令(将前端静态文件打包到resources/public目录下)： `)
+      console.log(`\n    cnpm run build `)
+    }
+  )
+}
+
+inquirer.prompt(question).then(answers => {
+  let { author, description, artifactID, groupID} = answers
+
+  // 创建文件夹
+  var mkdirMain = answers.artifactID + '/src/main'
+  var mkdirJava = mkdirMain + '/java/' + answers.groupID.replace(/\./g, '/') + '/' +answers.artifactID
+  makep(mkdirJava)
+  
+  var mkdirSource = mkdirMain + '/resources'
+  makep(mkdirSource)
+  
+  var mkdirConfig = mkdirJava + '/config'
+  makep(mkdirConfig)
+
+  // 定义模版文件路径
+  var applicationYml = `${__dirname}/../template/application.yml`
+  var pomXml = `${__dirname}/../template/pom.xml`
+  var webCenterConfigJava = `${__dirname}/../template/WebCenterConfig.java`
+  var applicationJava = `${__dirname}/../template/SampleApplication.java`
+
+  // application.yml文件生成
+  var ymlReplaces = [{"key": "sample", "value": answers.artifactID}]
+  fileCreate(applicationYml, mkdirSource, '/application.yml', ymlReplaces)
+
+  // pom.xml文件生成
+  var pomReplaces = [{"key": "$artifactId", "value": answers.artifactID},
+                     {"key": "$groupId", "value": answers.groupID}]
+  fileCreate(pomXml, answers.artifactID, '/pom.xml', pomReplaces)
+
+  // WebCenterConfig.java文件生成
+  var configReplaces = [{"key": "$package", "value": answers.groupID + '.' + answers.artifactID + ".config"}]
+  fileCreate(webCenterConfigJava, mkdirConfig, '/WebCenterConfig.java', configReplaces)
+
+  // springBoot启动文件生成
+  var appMainName = answers.artifactID.toLowerCase().replace(/( |^)[a-z]/g, (L) => L.toUpperCase())                         
+  var applicationReplaces = [{"key": "$package", "value": answers.groupID + '.' + answers.artifactID},
+                             {"key": "$artifactId", "value": appMainName}]
+  fileCreate(applicationJava, mkdirJava, '/'+ appMainName +'Application.java', applicationReplaces)
+  
+  // 下载Vue后端模版
+  spinner.start();
+  downloadWebpage(mkdirSource, answers)
+})
